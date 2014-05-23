@@ -1,3 +1,7 @@
 *.exe
 *.o
-
+sftp-config.json
+client
+client-v2
+multiple-test
+multiple-test-v2

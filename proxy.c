@@ -9,11 +9,19 @@
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
+#include <pthread.h>
 
 #define BUFFER_SIZE 2048
 #define HOST_PORT 80
+#define MAX_THREADS 12
+#define MAX_CONNECTION 10
 
-// int get_message_from_host(int my_sockfd, const struct socketaddr_in* host);
+/* Request handling function used to handle request from client */
+void *request_handler(void *);
+
+/* Builds a get request from a hostname (should be deleted as new client creates
+   the request
+*/
 char *build_query(char *);
 
 int main(int argc, char const *argv[])
@@ -29,109 +37,137 @@ int main(int argc, char const *argv[])
     }
 
     /* Setup process */
-    int my_sockfd = 0, 
-        client_sockfd = 0, 
-        host_sockfd = 0, 
-        cli_addr_length;
-    struct sockaddr_in proxy_addr, cli_addr, host_addr; 
-    struct hostent *host;
+    int proxy_sockfd = 0;
 
-    char to_client_buffer[BUFFER_SIZE];
+    struct sockaddr_in proxy_addr;
 
     // Create a socket addr family: IPv4, type: steam (IPv4), protocol: 0
-    my_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    proxy_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     memset(&proxy_addr, 0, sizeof(proxy_addr));
-    memset(to_client_buffer, 0, sizeof(to_client_buffer));
-    memset(&host_addr, 0, sizeof(host_addr)); 
 
     // Sets up server
     proxy_addr.sin_family = AF_INET;
     // htonl converts unsigned int hostlong from host byte order to network byte order
     proxy_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    proxy_addr.sin_port = htons(atoi(argv[1])); 
+    proxy_addr.sin_port = htons(atoi(argv[1]));
 
 
     // bind the server to the port
-    if (bind(my_sockfd, (struct sockaddr*) &proxy_addr, sizeof(proxy_addr)) < 0) {
-        fprintf(stderr, "ERROR on binding\n");
+    if (bind(proxy_sockfd, (struct sockaddr*) &proxy_addr, sizeof(proxy_addr)) < 0) {
+        fprintf(stderr, "Unable to bind to port\n");
         exit(1);
-    } 
+    }
 
     // start listening on the port
-    listen(my_sockfd, 10); 
+    listen(proxy_sockfd, MAX_CONNECTION);
 
+    /* End of setup for proxy, now listening */
+
+    // creating threads
+    pthread_t threads[MAX_THREADS];
+    for (int i = 0; i < MAX_THREADS; ++i) {
+        int err = pthread_create(&threads[i], NULL, request_handler, (void*) &proxy_sockfd);
+        if (err) {
+            fprintf(stderr, "Unable to create thread %d with error message %d\n", i, err);
+        }
+    }
+
+    // joining threads
+    for (int i = 0; i < MAX_THREADS; ++i) {
+        if (pthread_join(threads[i], NULL)) {
+            fprintf(stderr, "Unable to join thread %d\n", i);
+        }
+    }
+
+    close(proxy_sockfd);
+
+    fprintf(stderr, "Completed all requests\n");
+    return 0;
+}
+
+void *request_handler(void *sockfd) {
+    // initializes socket file descriptors
+    int proxy_sockfd = *((int *) sockfd),
+        client_sockfd = 0,
+        host_sockfd = 0,
+        bread = 0,
+        bwrite = 0,
+        cli_addr_length;
+
+    char hostname[BUFFER_SIZE],
+         response[BUFFER_SIZE],
+         *query;
+
+    // address structs
+    struct sockaddr_in cli_addr, host_addr;
+    // stores address about host returned by gethostbyname
+    struct hostent *host;
+
+    // declaring i/o buffers
+    char to_client_buffer[BUFFER_SIZE];
+
+    // initialize buffers and address structs
+    memset(to_client_buffer, 0, sizeof(to_client_buffer));
+    memset(&host_addr, 0, sizeof(host_addr));
+
+    // accepting connection from client
     cli_addr_length = sizeof(cli_addr);
-
-    /* End of setup */
-
-    client_sockfd = accept(my_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length); 
-
-    // accepts from client
+    client_sockfd = accept(proxy_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length);
     if (client_sockfd < 0) {
         fprintf(stderr, "ERROR on accept\n");
         exit(1);
-    } 
+    }
 
-    // read host from client
-    int bread = 0,
-        bwrite = 0;
-    char hostname[BUFFER_SIZE];
-    char *query;
-    
+    // read message/request sent from client
     if (0 == read(client_sockfd, hostname, BUFFER_SIZE)) {
         fprintf(stderr, "No host given\n");
         close(client_sockfd);
-        exit(EXIT_FAILURE);
+        return;
     }
 
     // setup host
     host = gethostbyname(hostname);
-
-    host_addr.sin_family = AF_INET;
-    host_addr.sin_port = htons(HOST_PORT);
-    bcopy((char *)host->h_addr, 
-          (char *)&host_addr.sin_addr.s_addr,
-          host->h_length);
     if (host == NULL) {
         fprintf(stderr,"No such host\n");
         exit(0);
     }
+    host_addr.sin_family = AF_INET;
+    host_addr.sin_port = htons(HOST_PORT);
+
+    /*POSSIBLE SOURCE OF BUG*/
+    bcopy((char *)host->h_addr,
+           (char *)&host_addr.sin_addr.s_addr,
+           host->h_length);
+    /*POSSIBLE SOURCE OF BUG*/
 
     // build get query
     query = build_query(hostname);
+    fprintf(stderr, "Query: %s\n", query);
 
     // connect to host
     host_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (connect(host_sockfd, (struct sockaddr *)&host_addr, sizeof(struct sockaddr)) < 0) 
+    if (connect(host_sockfd, (struct sockaddr *)&host_addr, sizeof(struct sockaddr)) < 0)
     {
          fprintf(stderr, "Can't connect to host\n.");
-         exit(EXIT_FAILURE);
+         return;
     }
 
-    fprintf(stderr, "Query: %s\n", query);
+    // forward request onto server
     if (0 == (bwrite = write(host_sockfd, query, strlen(query)))) {
         fprintf(stderr, "Can't write to host\n.");
-        exit(EXIT_FAILURE);
+        return;
     }
 
-    char response[BUFFER_SIZE];
-    // Keep on reading response from server
+    // keep on reading response from server
     while(0 < (bread = read(host_sockfd, response, BUFFER_SIZE))) {
         // write response back to client
         write(client_sockfd, response, bread);
         memset(response, 0, BUFFER_SIZE);
     }
 
+    // close sockets
     close(host_sockfd);
     close(client_sockfd);
-    close(my_sockfd);
-    // memcpy(to_client_buffer, "You received me bradda!\n", 25);
-
-    // write(client_sockfd, to_client_buffer, strlen(to_client_buffer)); 
-    // close(client_sockfd);
-
-    fprintf(stderr, "Completed request\n");
-    return 0;
 }
 
 char *build_query(char *host) {

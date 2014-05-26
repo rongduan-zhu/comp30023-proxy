@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <errno.h>
+#include <signal.h>
 
 #define BUFFER_SIZE 2048
 #define HOST_PORT 80
@@ -22,8 +23,12 @@ int main(int argc, char const *argv[])
         exit(1);
     }
 
-    /* Setup process */
+    // Ignoring broken pipe signal
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+        fprintf(stderr, "Can't handle broken pipe issue\n");
+    }
 
+    /* Setup process */
     int my_sockfd = 0, 
         client_sockfd = 0, 
         host_sockfd = 0, 
@@ -125,6 +130,7 @@ int main(int argc, char const *argv[])
     // write(client_sockfd, to_client_buffer, strlen(to_client_buffer)); 
     // close(client_sockfd);
 
+    fprintf(stderr, "Completed request\n");
     return 0;
 }
 

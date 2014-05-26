@@ -5,3 +5,4 @@ client
 client-v2
 multiple-test
 multiple-test-v2
+*.log

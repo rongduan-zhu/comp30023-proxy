@@ -24,6 +24,9 @@ void *request_handler(void *);
 */
 char *build_query(char *);
 
+/* Print log for a request */
+void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostname);
+
 int main(int argc, char const *argv[])
 {
     if (argc != 2) {
@@ -92,6 +95,7 @@ void *request_handler(void *sockfd) {
         host_sockfd = 0,
         bread = 0,
         bwrite = 0,
+        total_bread = 0;
         cli_addr_length;
 
     char hostname[BUFFER_SIZE],
@@ -146,8 +150,7 @@ void *request_handler(void *sockfd) {
 
     // connect to host
     host_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (connect(host_sockfd, (struct sockaddr *)&host_addr, sizeof(struct sockaddr)) < 0)
-    {
+    if (connect(host_sockfd, (struct sockaddr *)&host_addr, sizeof(struct sockaddr)) < 0) {
          fprintf(stderr, "Can't connect to host\n.");
          return;
     }
@@ -163,7 +166,15 @@ void *request_handler(void *sockfd) {
         // write response back to client
         write(client_sockfd, response, bread);
         memset(response, 0, BUFFER_SIZE);
+        total_bread += bread;
     }
+
+
+    char client_addr[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(host_addr.sin_addr), client_addr, INET_ADDRSTRLEN);
+    fprintf(stderr, "%s %d\n", client_addr, cli_addr.sin_port);
+
+    print_log(client_addr, cli_addr.sin_port, total_bread, hostname);
 
     // close sockets
     close(host_sockfd);
@@ -178,4 +189,12 @@ char *build_query(char *host) {
                             - 3);
     sprintf(query, get, host);
     return query;
+}
+
+void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostname) {
+    FILE *fp;
+    time_t
+
+    fp = fopen("proxy.log", "a");
+    fprintf(fp, "%")
 }

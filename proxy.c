@@ -12,6 +12,7 @@
 #include <pthread.h>
 
 #define BUFFER_SIZE 2048
+#define SMALL_BUFFER_SIZE 256
 #define HOST_PORT 80
 #define MAX_THREADS 12
 #define MAX_CONNECTION 10
@@ -112,8 +113,9 @@ void *request_handler(void *sockfd) {
         total_bread = 0,
         cli_addr_length;
 
-    char hostname[BUFFER_SIZE],
-         response[BUFFER_SIZE],
+    char response[BUFFER_SIZE],
+         query_buffer[BUFFER_SIZE],
+         *hostname,
          *query;
 
     // address structs
@@ -132,22 +134,26 @@ void *request_handler(void *sockfd) {
     cli_addr_length = sizeof(cli_addr);
     client_sockfd = accept(proxy_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length);
     if (client_sockfd < 0) {
-        fprintf(stderr, "ERROR on accept\n");
-        exit(1);
+        fprintf(stderr, "Error on accept\n");
+        return NULL;
     }
 
     // read message/request sent from client
-    if (0 == read(client_sockfd, hostname, BUFFER_SIZE)) {
+    if (0 == read(client_sockfd, query_buffer, BUFFER_SIZE)) {
         fprintf(stderr, "No host given\n");
         close(client_sockfd);
         return NULL;
     }
 
+    query = query_buffer;
+    // get host name from query
+    hostname = get_host_from_query(query);
+
     // setup host
     host = gethostbyname(hostname);
     if (host == NULL) {
         fprintf(stderr,"No such host\n");
-        exit(0);
+        return NULL;
     }
     host_addr.sin_family = AF_INET;
     host_addr.sin_port = htons(HOST_PORT);
@@ -157,10 +163,6 @@ void *request_handler(void *sockfd) {
            (char *)&host_addr.sin_addr.s_addr,
            host->h_length);
     /*POSSIBLE SOURCE OF BUG*/
-
-    // build get query
-    query = build_query(hostname);
-    fprintf(stderr, "Query: %s\n", query);
 
     // connect to host
     host_sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -186,7 +188,6 @@ void *request_handler(void *sockfd) {
 
     char client_addr[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(host_addr.sin_addr), client_addr, INET_ADDRSTRLEN);
-    fprintf(stderr, "%s %d\n", client_addr, cli_addr.sin_port);
 
     print_log(client_addr, cli_addr.sin_port, total_bread, hostname);
 
@@ -208,7 +209,20 @@ char *build_query(char *host) {
 }
 
 char *get_host_from_query(char *query) {
-    return "";
+    // start is at 4 because get+space, its static
+    int start = 11,
+        end = 0;
+    char hostname[BUFFER_SIZE];
+    for (int i = start; i < strlen(query); ++i) {
+        if (query[i] == ' ') {
+            end = i;
+            break;
+        }
+    }
+    // append end of string
+    memcpy(hostname, &query[start], end - start);
+    hostname[end - start - 1] = '\0';
+    return hostname;
 }
 
 void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostname) {
@@ -233,6 +247,7 @@ void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostna
     fp = fopen("proxy.log", "a");
 
     fprintf(fp, "%s,%s,%d,%d,%s\n", time_string, ip, port_number, bytes_sent, requested_hostname);
+    fprintf(stderr, "%s, %s, %d, %d, %s\n", time_string, ip, port_number, bytes_sent, requested_hostname);
 
     fclose(fp);
 

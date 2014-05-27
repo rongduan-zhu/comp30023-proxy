@@ -34,6 +34,12 @@ void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostna
 /* mutex lock */
 pthread_mutex_t lock;
 
+/* input struct for thread */
+typedef struct {
+    int client_sockfd;
+    struct sockaddr_in cli_addr;
+} thread_args;
+
 int main(int argc, char const *argv[])
 {
     if (argc != 2) {
@@ -53,9 +59,12 @@ int main(int argc, char const *argv[])
     }
 
     /* Setup process */
-    int proxy_sockfd = 0;
+    int proxy_sockfd = 0,
+        client_sockfd = 0,
+        cli_addr_length;
 
-    struct sockaddr_in proxy_addr;
+    struct sockaddr_in proxy_addr,
+                       cli_addr;
 
     // Create a socket addr family: IPv4, type: steam (IPv4), protocol: 0
     proxy_sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -79,19 +88,26 @@ int main(int argc, char const *argv[])
 
     /* End of setup for proxy, now listening */
 
-    // creating threads
-    pthread_t threads[MAX_THREADS];
-    for (int i = 0; i < MAX_THREADS; ++i) {
-        int err = pthread_create(&threads[i], NULL, request_handler, (void*) &proxy_sockfd);
-        if (err) {
-            fprintf(stderr, "Unable to create thread %d with error message %d\n", i, err);
-        }
-    }
+    // starts accepting requests
+    while (1) {
+        cli_addr_length = sizeof(cli_addr);
+        pthread_t thread;
+        client_sockfd = accept(proxy_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length);
 
-    // joining threads
-    for (int i = 0; i < MAX_THREADS; ++i) {
-        if (pthread_join(threads[i], NULL)) {
-            fprintf(stderr, "Unable to join thread %d\n", i);
+        thread_args *thread_arg;
+        thread_arg = (thread_args *) malloc(sizeof(thread_args));
+        thread_arg->client_sockfd = client_sockfd;
+        thread_arg->cli_addr = cli_addr;
+
+        // on receiving a request, spawn new thread
+        int err = pthread_create(&thread, NULL, request_handler, (void*) thread_arg);
+        if (err) {
+            fprintf(stderr, "Unable to create thread with error message %d\n", err);
+        }
+
+        // detach the thread
+        if (pthread_detach(thread)) {
+            fprintf(stderr, "Unable to detach thread\n");
         }
     }
 
@@ -103,15 +119,14 @@ int main(int argc, char const *argv[])
     return 0;
 }
 
-void *request_handler(void *sockfd) {
+void *request_handler(void *thread_arg) {
     // initializes socket file descriptors
-    int proxy_sockfd = *((int *) sockfd),
-        client_sockfd = 0,
+    thread_args arg = *((thread_args *) thread_arg);
+    int client_sockfd = arg.client_sockfd,
         host_sockfd = 0,
         bread = 0,
         bwrite = 0,
-        total_bread = 0,
-        cli_addr_length;
+        total_bread = 0;
 
     char response[BUFFER_SIZE],
          query_buffer[BUFFER_SIZE],
@@ -122,6 +137,7 @@ void *request_handler(void *sockfd) {
     struct sockaddr_in cli_addr, host_addr;
     // stores address about host returned by gethostbyname
     struct hostent *host;
+    cli_addr = arg.cli_addr;
 
     // declaring i/o buffers
     char to_client_buffer[BUFFER_SIZE];
@@ -130,9 +146,8 @@ void *request_handler(void *sockfd) {
     memset(to_client_buffer, 0, sizeof(to_client_buffer));
     memset(&host_addr, 0, sizeof(host_addr));
 
-    // accepting connection from client
-    cli_addr_length = sizeof(cli_addr);
-    client_sockfd = accept(proxy_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length);
+    // accepting connection from clien = sizeof(cli_addr);
+
     if (client_sockfd < 0) {
         fprintf(stderr, "Error on accept\n");
         return NULL;
@@ -197,6 +212,10 @@ void *request_handler(void *sockfd) {
     // close sockets
     close(host_sockfd);
     close(client_sockfd);
+
+    // free memory
+    free((thread_args *) thread_arg);
+    free(hostname);
 
     return NULL;
 }

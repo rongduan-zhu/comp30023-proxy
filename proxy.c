@@ -218,8 +218,8 @@ char *get_host_from_query(char *query) {
     // start is at 4 because get+space, its static
     int start = 11,
         end = 0;
-    char hostname[BUFFER_SIZE];
-    for (int i = start; i < strlen(query); ++i) {
+    char *hostname = (char *) malloc(BUFFER_SIZE);
+    for (int i = start; i < (int) strlen(query); ++i) {
         if (query[i] == ' ') {
             end = i;
             break;
@@ -241,7 +241,7 @@ void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostna
 
     if(NULL == (time_string = ctime(&current_time))) {
         fprintf(stderr, "Unable to convert current time.\n");
-        current_time = "N/A";
+        time_string = "N/A";
     }
 
     // remove new line appended by ctime

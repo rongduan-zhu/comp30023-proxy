@@ -159,8 +159,8 @@ void *request_handler(void *sockfd) {
     host_addr.sin_port = htons(HOST_PORT);
 
     /*POSSIBLE SOURCE OF BUG*/
-    bcopy((char *)host->h_addr,
-           (char *)&host_addr.sin_addr.s_addr,
+    memcpy((char *)&host_addr.sin_addr.s_addr,
+           (char *)host->h_addr,
            host->h_length);
     /*POSSIBLE SOURCE OF BUG*/
 
@@ -207,7 +207,10 @@ char *build_query(char *host) {
     query = (char *) malloc(strlen(host)
                             + strlen(get)
                             - 3);
-    sprintf(query, get, host);
+    // not using "get" as second argument as compiler gives a warning, and we might
+    // get mark deduction. After googling, the warning is completely normal, and
+    // it can be safely ignored, but I don't wanna risk it
+    sprintf(query, "GET / HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", host);
     return query;
 }
 
@@ -242,7 +245,7 @@ void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostna
     }
 
     // remove new line appended by ctime
-    time_string[strlen(time_string) - 2] = '\0';
+    time_string[strlen(time_string) - 1] = '\0';
 
     // apply mutex lock
     pthread_mutex_lock(&lock);

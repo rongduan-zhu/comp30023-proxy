@@ -20,23 +20,35 @@
 void *request_handler(void *);
 
 /* Builds a get request from a hostname (should be deleted as new client creates
-   the request
+   the request (Not used because new version)
 */
 char *build_query(char *);
 
+/* Get host from query */
+char *get_host_from_query(char *);
+
 /* Print log for a request */
 void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostname);
+
+/* mutex lock */
+pthread_mutex_t lock;
 
 int main(int argc, char const *argv[])
 {
     if (argc != 2) {
         fprintf(stderr,"Incorrect number of arguments.\nUsage: %s port_number\n", argv[0]);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
-    // Ignoring broken pipe signal
+    // ignoring broken pipe signal
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
         fprintf(stderr, "Can't handle broken pipe issue\n");
+    }
+
+    // initialize mutex lock
+    if (pthread_mutex_init(&lock, NULL) != 0) {
+        fprintf(stderr, "Can't initialize mutex lock\n");
+        exit(EXIT_FAILURE);
     }
 
     /* Setup process */
@@ -82,7 +94,9 @@ int main(int argc, char const *argv[])
         }
     }
 
+    // close socket and destroy mutex lock
     close(proxy_sockfd);
+    pthread_mutex_destroy(&lock);
 
     fprintf(stderr, "Completed all requests\n");
     return 0;
@@ -95,7 +109,7 @@ void *request_handler(void *sockfd) {
         host_sockfd = 0,
         bread = 0,
         bwrite = 0,
-        total_bread = 0;
+        total_bread = 0,
         cli_addr_length;
 
     char hostname[BUFFER_SIZE],
@@ -126,7 +140,7 @@ void *request_handler(void *sockfd) {
     if (0 == read(client_sockfd, hostname, BUFFER_SIZE)) {
         fprintf(stderr, "No host given\n");
         close(client_sockfd);
-        return;
+        return NULL;
     }
 
     // setup host
@@ -152,13 +166,13 @@ void *request_handler(void *sockfd) {
     host_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (connect(host_sockfd, (struct sockaddr *)&host_addr, sizeof(struct sockaddr)) < 0) {
          fprintf(stderr, "Can't connect to host\n.");
-         return;
+         return NULL;
     }
 
     // forward request onto server
     if (0 == (bwrite = write(host_sockfd, query, strlen(query)))) {
         fprintf(stderr, "Can't write to host\n.");
-        return;
+        return NULL;
     }
 
     // keep on reading response from server
@@ -179,6 +193,8 @@ void *request_handler(void *sockfd) {
     // close sockets
     close(host_sockfd);
     close(client_sockfd);
+
+    return NULL;
 }
 
 char *build_query(char *host) {
@@ -191,10 +207,35 @@ char *build_query(char *host) {
     return query;
 }
 
+char *get_host_from_query(char *query) {
+    return "";
+}
+
 void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostname) {
     FILE *fp;
-    time_t
+    time_t current_time;
+    char *time_string;
+
+    // get current time
+    current_time = time(NULL);
+
+    if(NULL == (time_string = ctime(&current_time))) {
+        fprintf(stderr, "Unable to convert current time.\n");
+        current_time = "N/A";
+    }
+
+    // remove new line appended by ctime
+    time_string[strlen(time_string) - 2] = '\0';
+
+    // apply mutex lock
+    pthread_mutex_lock(&lock);
 
     fp = fopen("proxy.log", "a");
-    fprintf(fp, "%")
+
+    fprintf(fp, "%s,%s,%d,%d,%s\n", time_string, ip, port_number, bytes_sent, requested_hostname);
+
+    fclose(fp);
+
+    // unlock mutex
+    pthread_mutex_unlock(&lock);
 }

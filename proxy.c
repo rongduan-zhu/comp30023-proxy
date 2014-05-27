@@ -14,7 +14,7 @@
 #define BUFFER_SIZE 2048
 #define SMALL_BUFFER_SIZE 256
 #define HOST_PORT 80
-#define MAX_THREADS 12
+#define MAX_THREADS 15
 #define MAX_CONNECTION 10
 
 /* Request handling function used to handle request from client */
@@ -180,7 +180,10 @@ void *request_handler(void *sockfd) {
     // keep on reading response from server
     while(0 < (bread = read(host_sockfd, response, BUFFER_SIZE))) {
         // write response back to client
-        write(client_sockfd, response, bread);
+        if(write(client_sockfd, response, bread) < 0) {
+            fprintf(stderr, "Client terminated early.\n");
+            return NULL;
+        }
         memset(response, 0, BUFFER_SIZE);
         total_bread += bread;
     }

@@ -197,7 +197,8 @@ void *request_handler(void *thread_arg) {
         // write response back to client
         if(write(client_sockfd, response, bread) < 0) {
             fprintf(stderr, "Client terminated early.\n");
-            return NULL;
+            // return NULL;
+            break;
         }
         memset(response, 0, BUFFER_SIZE);
         total_bread += bread;

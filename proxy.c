@@ -10,12 +10,15 @@
 #include <errno.h>
 #include <signal.h>
 #include <pthread.h>
+#include <time.h>
 
 #define BUFFER_SIZE 2048
 #define SMALL_BUFFER_SIZE 256
 #define HOST_PORT 80
 #define MAX_THREADS 15
 #define MAX_CONNECTION 10
+/* 29 because the "GET http:/// HTTP/1.0\r\n\r\n" is 29 characters*/
+#define MIN_CLIENT_CHUNK_BYTE 29
 
 /* Request handling function used to handle request from client */
 void *request_handler(void *);
@@ -130,6 +133,7 @@ void *request_handler(void *thread_arg) {
 
     char response[BUFFER_SIZE],
          query_buffer[BUFFER_SIZE],
+         temp_buffer[BUFFER_SIZE],
          *hostname,
          *query;
 
@@ -145,6 +149,8 @@ void *request_handler(void *thread_arg) {
     // initialize buffers and address structs
     memset(to_client_buffer, 0, sizeof(to_client_buffer));
     memset(&host_addr, 0, sizeof(host_addr));
+    memset(query_buffer, '\0', BUFFER_SIZE);
+    memset(temp_buffer, '\0', BUFFER_SIZE);
 
     // accepting connection from clien = sizeof(cli_addr);
 
@@ -153,10 +159,47 @@ void *request_handler(void *thread_arg) {
         return NULL;
     }
 
-    // read message/request sent from client
-    if (0 == read(client_sockfd, query_buffer, BUFFER_SIZE)) {
-        fprintf(stderr, "No host given, client probably terminated before sending any data\n");
-        close(client_sockfd);
+    // read message/request sent from client, this gets blocked if client
+    // don't sends a complete http request
+    int end_of_request_flag = 0;
+    while (0 < (bread = read(client_sockfd, temp_buffer, BUFFER_SIZE))) {
+        // close connection if buffer overflow
+        if (bread + total_bread > BUFFER_SIZE) {
+            char error_message[SMALL_BUFFER_SIZE] = "Query too big\n";
+            fprintf(stderr, "Buffer overflow, terminating request\n");
+            write(client_sockfd, error_message, strlen(error_message));
+            return NULL;
+        }
+
+        // appends temp_buffer to query_buffer
+        strncat(query_buffer, temp_buffer, bread);
+        total_bread += bread;
+
+        if (total_bread > MIN_CLIENT_CHUNK_BYTE) {
+            // checks if request is done, if it is, stop reading
+            if (query_buffer[total_bread - 1] == '\n'
+                && query_buffer[total_bread - 2] == '\r'
+                && query_buffer[total_bread - 3] == '\n'
+                && query_buffer[total_bread - 4] == '\r') {
+                end_of_request_flag = 1;
+                break;
+            }
+        }
+
+        // if number of bytes read is less than MIN_CLIENT_CHUNK_BYTE,
+        // could result in thread being blocked if client decides to not
+        // send anymore data and not close the connection
+        // if (bread <= MIN_CLIENT_CHUNK_BYTE) {
+        //     fprintf(stderr, "Client is not sending enough data, this thread may be blocked\n");
+        // }
+
+        // checks if client has finished request by reading the last 4 bytes
+        // and see if it matches \r\n\r\n
+        memset(temp_buffer, '\0', BUFFER_SIZE);
+    }
+
+    if (end_of_request_flag != 1 || bread < 0) {
+        fprintf(stderr, "Invalid request or client terminated early.\n");
         return NULL;
     }
 
@@ -173,11 +216,9 @@ void *request_handler(void *thread_arg) {
     host_addr.sin_family = AF_INET;
     host_addr.sin_port = htons(HOST_PORT);
 
-    /*POSSIBLE SOURCE OF BUG*/
     memcpy((char *)&host_addr.sin_addr.s_addr,
            (char *)host->h_addr,
            host->h_length);
-    /*POSSIBLE SOURCE OF BUG*/
 
     // connect to host
     host_sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -193,6 +234,7 @@ void *request_handler(void *thread_arg) {
     }
 
     // keep on reading response from server
+    total_bread = 0;
     while(0 < (bread = read(host_sockfd, response, BUFFER_SIZE))) {
         // write response back to client
         if(write(client_sockfd, response, bread) < 0) {

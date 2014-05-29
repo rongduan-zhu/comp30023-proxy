@@ -28,17 +28,17 @@ def client_thread(proxy_addr, port_no):
 
     query = "GET http://" + server_addr + "/ HTTP/1.0\r\n\r\n"
     quit = to_quit("Quitting after first chunk of data sent\n", "during write")
-    while len(query) < 0:
+    while len(query) > 0:
         # pick a random number of bytes to send
-        rand_int = randint(1, 10)
-        bsend = rand_int < len(query) if rand_int else len(query)
+        rand_int = random.randint(1, 10)
+        bsend = rand_int if rand_int < len(query) else len(query)
 
         sockfd.send(query[:bsend])
 
         query = query[bsend:]
 
         #waits a few milliseconds
-        time_waited = random.random() * 2
+        time_waited = random.random()
         time.sleep(time_waited)
 
         # if quit during write then quit
@@ -50,21 +50,24 @@ def client_thread(proxy_addr, port_no):
         return
 
     temp_data = sockfd.recv(BUFFER_SIZE)
+
     data = temp_data
     quit = to_quit("Quitting after receiving first chunk of data\n", "during read")
     while (len(temp_data) > 0):
+
         temp_data = sockfd.recv(BUFFER_SIZE)
         data += temp_data
         if quit:
             cerr("Received " + str(len(data)) + " bytes of data from " + server_addr + "\n")
             return
 
+    cerr(data + "\n\n\n")
     cerr("Received " + str(len(data)) + " bytes of data from " + server_addr + "\n")
 
     return
 
-def to_quit(message, staus):
-    _to_quit = random.randint(0, 100)
+def to_quit(message, status):
+    _to_quit = random.randint(0, 2)
     if _to_quit == 0:
         cerr(message)
         return True

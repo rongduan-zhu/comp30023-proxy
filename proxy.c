@@ -155,7 +155,7 @@ void *request_handler(void *thread_arg) {
 
     // read message/request sent from client
     if (0 == read(client_sockfd, query_buffer, BUFFER_SIZE)) {
-        fprintf(stderr, "No host given\n");
+        fprintf(stderr, "No host given, client probably terminated before sending any data\n");
         close(client_sockfd);
         return NULL;
     }

@@ -95,10 +95,17 @@ int main(int argc, char const *argv[])
     while (1) {
         cli_addr_length = sizeof(cli_addr);
         pthread_t thread;
-        client_sockfd = accept(proxy_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length);
+        if (0 > (client_sockfd = accept(proxy_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length))) {
+            fprintf(stderr, "Error on accept with error %d\n", errno);
+            exit(EXIT_FAILURE);
+        }
 
         thread_args *thread_arg;
         thread_arg = (thread_args *) malloc(sizeof(thread_args));
+        if (thread_arg == NULL) {
+            fprintf(stderr, "Oh no! Not enough memory to create new thread\nSkipping request\n");
+            continue;
+        }
         thread_arg->client_sockfd = client_sockfd;
         thread_arg->cli_addr = cli_addr;
 
@@ -106,11 +113,15 @@ int main(int argc, char const *argv[])
         int err = pthread_create(&thread, NULL, request_handler, (void*) thread_arg);
         if (err) {
             fprintf(stderr, "Unable to create thread with error message %d\n", err);
+            sleep(5);
+            continue;
         }
 
         // detach the thread
         if (pthread_detach(thread)) {
             fprintf(stderr, "Unable to detach thread\n");
+            sleep(5);
+            continue;
         }
     }
 
@@ -129,7 +140,8 @@ void *request_handler(void *thread_arg) {
         host_sockfd = 0,
         bread = 0,
         bwrite = 0,
-        total_bread = 0;
+        total_bread = 0,
+        total_bwrite = 0;
 
     char response[BUFFER_SIZE],
          query_buffer[BUFFER_SIZE],
@@ -153,11 +165,6 @@ void *request_handler(void *thread_arg) {
     memset(temp_buffer, '\0', BUFFER_SIZE);
 
     // accepting connection from clien = sizeof(cli_addr);
-
-    if (client_sockfd < 0) {
-        fprintf(stderr, "Error on accept\n");
-        return NULL;
-    }
 
     // read message/request sent from client, this gets blocked if client
     // don't sends a complete http request
@@ -206,6 +213,9 @@ void *request_handler(void *thread_arg) {
     query = query_buffer;
     // get host name from query
     hostname = get_host_from_query(query);
+    if (hostname == NULL) {
+        return NULL;
+    }
 
     // setup host
     host = gethostbyname(hostname);
@@ -234,23 +244,23 @@ void *request_handler(void *thread_arg) {
     }
 
     // keep on reading response from server
-    total_bread = 0;
+    total_bwrite = 0;
     while(0 < (bread = read(host_sockfd, response, BUFFER_SIZE))) {
         // write response back to client
-        if(write(client_sockfd, response, bread) < 0) {
+        if(0 > (bwrite = write(client_sockfd, response, bread))) {
             fprintf(stderr, "Client terminated early.\n");
             // return NULL;
             break;
         }
         memset(response, 0, BUFFER_SIZE);
-        total_bread += bread;
+        total_bwrite += bwrite;
     }
 
 
     char client_addr[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(host_addr.sin_addr), client_addr, INET_ADDRSTRLEN);
 
-    print_log(client_addr, cli_addr.sin_port, total_bread, hostname);
+    print_log(client_addr, cli_addr.sin_port, total_bwrite, hostname);
 
     // close sockets
     close(host_sockfd);
@@ -272,6 +282,10 @@ char *build_query(char *host) {
     // not using "get" as second argument as compiler gives a warning, and we might
     // get mark deduction. After googling, the warning is completely normal, and
     // it can be safely ignored, but I don't wanna risk it
+    if (query == NULL) {
+        fprintf(stderr, "Oh no :O, not enough memory!\nClosing Connection\n");
+        return query;
+    }
     sprintf(query, "GET / HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", host);
     return query;
 }
@@ -281,6 +295,10 @@ char *get_host_from_query(char *query) {
     int start = 11,
         end = 0;
     char *hostname = (char *) malloc(BUFFER_SIZE);
+    if (hostname == NULL) {
+        fprintf(stderr, "Oh no :O, not enough memory!\nClosing Connection\n");
+        return hostname;
+    }
     for (int i = start; i < (int) strlen(query); ++i) {
         if (query[i] == ' ') {
             end = i;
@@ -301,7 +319,7 @@ void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostna
     // get current time
     current_time = time(NULL);
 
-    if(NULL == (time_string = ctime(&current_time))) {
+    if (NULL == (time_string = ctime(&current_time))) {
         fprintf(stderr, "Unable to convert current time.\n");
         time_string = "N/A";
     }

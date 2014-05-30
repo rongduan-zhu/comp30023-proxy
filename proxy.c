@@ -31,19 +31,40 @@
 /* 29 because the "GET http:/// HTTP/1.0\r\n\r\n" is 29 characters*/
 #define MIN_CLIENT_CHUNK_BYTE 29
 
-/* Request handling function used to handle request from client */
+/* - Accept connection from client
+   - Read the query from the client
+   - Process the query from the client
+   - Connect to specified host
+   - Forward client request to host
+   - Get response back from host
+   - Forward response back to client
+   - Write details of client request into proxy log file
+
+    thread_args_t thread_arg: struct containing client socket and
+                              client address
+
+    return: NULL
+*/
 void *request_handler(void *);
 
-/* Builds a get request from a hostname (should be deleted as new client
-   creates the request (Not used because new version)
-*/
+/* Builds a HTTP GET request query
+   Argument: Hostname of web server
+   Returns: Full HTTP GET Query */
 char *build_query(char *);
 
-/* Get host from query */
+/* Retrieves the host name from a HTTP GET query
+   Argument: HTTP GET query
+   Returns: Host name */
 char *get_host_from_query(char *);
 
-/* Print log for a request */
-void print_log(char *ip,
+/* Writes details of client requests into log file named proxy.log
+   Arguments: ip - client ip address
+              port_number - client port number
+              bytes_sent - number of bytes that proxy server sends back to
+                           client
+              requested_hostname - domain hostname used in client request
+*/
+void write_log(char *ip,
                int port_number,
                int bytes_sent,
                char *requested_hostname);
@@ -55,7 +76,7 @@ pthread_mutex_t lock;
 typedef struct {
     int client_sockfd;
     struct sockaddr_in cli_addr;
-} thread_args;
+} thread_args_t;
 
 /* Set up proxy server and begin listening for client requests */
 /* Command Line Argument: Port Number - Integer */
@@ -124,8 +145,8 @@ int main(int argc, char const *argv[])
             exit(EXIT_FAILURE);
         }
 
-        thread_args *thread_arg;
-        thread_arg = (thread_args *) malloc(sizeof(thread_args));
+        thread_args_t *thread_arg;
+        thread_arg = (thread_args_t *) malloc(sizeof(thread_args_t));
         if (thread_arg == NULL) {
             fprintf(stderr, "Oh no! Not enough memory to create \
                     new thread\nSkipping request\n");
@@ -164,7 +185,7 @@ int main(int argc, char const *argv[])
 
 void *request_handler(void *thread_arg) {
     // initializes socket file descriptors
-    thread_args arg = *((thread_args *) thread_arg);
+    thread_args_t arg = *((thread_args_t *) thread_arg);
     int client_sockfd = arg.client_sockfd,
         host_sockfd = 0,
         bread = 0,
@@ -185,7 +206,7 @@ void *request_handler(void *thread_arg) {
     cli_addr = arg.cli_addr;
 
     // clear memory for unsed thread arguments
-    free((thread_args *) thread_arg);
+    free((thread_args_t *) thread_arg);
 
     // declaring i/o buffers
     char to_client_buffer[BUFFER_SIZE];
@@ -317,7 +338,7 @@ void *request_handler(void *thread_arg) {
     char client_addr[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(host_addr.sin_addr), client_addr, INET_ADDRSTRLEN);
 
-    print_log(client_addr, cli_addr.sin_port, total_bwrite, hostname);
+    write_log(client_addr, cli_addr.sin_port, total_bwrite, hostname);
 
     // close sockets
     close(host_sockfd);
@@ -368,7 +389,7 @@ char *get_host_from_query(char *query) {
     return hostname;
 }
 
-void print_log(char *ip, int port_number,
+void write_log(char *ip, int port_number,
                int bytes_sent, char *requested_hostname) {
     FILE *fp;
     time_t current_time;

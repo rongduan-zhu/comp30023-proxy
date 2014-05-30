@@ -13,7 +13,12 @@ address = ["www.google.com",
             "www.unimelb.edu.au",
             "www.cis.unimelb.edu.au",
             "www.github.com",
-            "www.facebook.com"]
+            "www.facebook.com",
+            "uni.tg.id.au",
+            "www.mubook.me",
+            "mundula.csse.unimelb.edu.au",
+            "www.youtube.com",
+            "www.lms.unimelb.edu.au"]
 
 def client_thread(proxy_addr, port_no):
     sockfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -1,3 +1,9 @@
+/*
+    Multithreaded simplified proxy program
+    Author:           Maxim Lobanov & Rongduan Zhu
+    Last Modified:    30/05/2014
+ */
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -12,11 +18,12 @@
 #include <pthread.h>
 #include <time.h>
 
+/* Buffer size used for reading response from server and requests from client */
 #define BUFFER_SIZE 2048
+/* Buffer size used for sending a error message back to client */
 #define SMALL_BUFFER_SIZE 256
 #define HOST_PORT 80
-#define MAX_THREADS 15
-#define MAX_CONNECTION 10
+#define MAX_CONNECTIONS 50
 /* 29 because the "GET http:/// HTTP/1.0\r\n\r\n" is 29 characters*/
 #define MIN_CLIENT_CHUNK_BYTE 29
 
@@ -73,6 +80,9 @@ int main(int argc, char const *argv[])
     proxy_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     memset(&proxy_addr, 0, sizeof(proxy_addr));
 
+    // setting variable used for accept
+    cli_addr_length = sizeof(cli_addr);
+
     // Sets up server
     proxy_addr.sin_family = AF_INET;
     // htonl converts unsigned int hostlong from host byte order to network byte order
@@ -87,13 +97,12 @@ int main(int argc, char const *argv[])
     }
 
     // start listening on the port
-    listen(proxy_sockfd, MAX_CONNECTION);
+    listen(proxy_sockfd, MAX_CONNECTIONS);
 
     /* End of setup for proxy, now listening */
 
     // starts accepting requests
     while (1) {
-        cli_addr_length = sizeof(cli_addr);
         pthread_t thread;
         if (0 > (client_sockfd = accept(proxy_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length))) {
             fprintf(stderr, "Error on accept with error %d\n", errno);
@@ -199,13 +208,6 @@ void *request_handler(void *thread_arg) {
             }
         }
 
-        // if number of bytes read is less than MIN_CLIENT_CHUNK_BYTE,
-        // could result in thread being blocked if client decides to not
-        // send anymore data and not close the connection
-        // if (bread <= MIN_CLIENT_CHUNK_BYTE) {
-        //     fprintf(stderr, "Client is not sending enough data, this thread may be blocked\n");
-        // }
-
         // checks if client has finished request by reading the last 4 bytes
         // and see if it matches \r\n\r\n
         memset(temp_buffer, '\0', BUFFER_SIZE);
@@ -252,7 +254,7 @@ void *request_handler(void *thread_arg) {
     // connect to host
     host_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (connect(host_sockfd, (struct sockaddr *)&host_addr, sizeof(struct sockaddr)) < 0) {
-        fprintf(stderr, "Can't connect to host\n.");
+        fprintf(stderr, "Can't connect to host.\n");
 
         // close sockets
         close(client_sockfd);

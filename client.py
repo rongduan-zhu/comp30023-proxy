@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 # Multithreaded python program simulating a client's behaviour
-# Author:           Rongduan Zhu
-# Last Modified:    29/05/2014
+# Author:           Maxim Lobanov & Rongduan Zhu
+# Last Modified:    30/05/2014
 
 import threading, time, sys, socket, random
 

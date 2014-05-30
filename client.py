@@ -25,7 +25,7 @@ def client_thread(proxy_addr, port_no):
 
     sockfd.connect((proxy_addr, int(port_no)))
 
-    server_addr = address[random.randint(0, 4)]
+    server_addr = address[random.randint(0, len(address) - 1)]
 
     # perform a random quit
     if to_quit("Quitting before sending any data\n", "after connect"):

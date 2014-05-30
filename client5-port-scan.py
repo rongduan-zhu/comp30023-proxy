@@ -23,62 +23,49 @@ address = ["www.google.com",
             "www.amazon.com"]
 
 def client_thread(proxy_addr, port_no):
-    sockfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sockfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    sockfd.connect((proxy_addr, int(port_no)))
+        sockfd.connect((proxy_addr, int(port_no)))
 
-    server_addr = address[random.randint(0, len(address) - 1)]
+        server_addr = address[random.randint(0, len(address) - 1)]
 
-    # perform a random quit
-    if to_quit("Quitting before sending any data\n", "after connect"):
-        return
 
-    query = "GET http://" + server_addr + "/ HTTP/1.0\r\n\r\n"
-    quit = to_quit("Quitting after first chunk of data sent\n", "during write")
-    while len(query) > 0:
-        # pick a random number of bytes to send
-        rand_int = random.randint(1, 10)
-        bsend = rand_int if rand_int < len(query) else len(query)
+        query = "GET http://" + server_addr + "/ HTTP/1.0\r\n\r\n"
+        while len(query) > 0:
+            # pick a random number of bytes to send
+            rand_int = random.randint(1, 10)
+            bsend = rand_int if rand_int < len(query) else len(query)
 
-        sockfd.send(query[:bsend])
+            sockfd.send(query[:bsend])
 
-        query = query[bsend:]
+            query = query[bsend:]
 
-        #waits a few milliseconds
-        time_waited = random.random()
-        time.sleep(time_waited)
-
-        # if quit during write then quit
-        if quit:
-            return
-
-    # maybe quit after sending all requests
-    if to_quit("Quitting after sending all data\n", "after write"):
-        return
-
-    temp_data = sockfd.recv(BUFFER_SIZE)
-
-    data = temp_data
-    quit = to_quit("Quitting after receiving first chunk of data\n", "during read")
-    while (len(temp_data) > 0):
+            #waits a few milliseconds
+            time_waited = random.random()
+            time.sleep(time_waited)
 
         temp_data = sockfd.recv(BUFFER_SIZE)
-        data += temp_data
-        if quit:
-            cerr("Received " + str(len(data)) + " bytes of data from " + server_addr + "\n")
-            return
 
-    cerr(data + "\n\n\n")
-    cerr("Received " + str(len(data)) + " bytes of data from " + server_addr + "\n")
+        data = temp_data
+        while (len(temp_data) > 0):
 
-    return
+            temp_data = sockfd.recv(BUFFER_SIZE)
+            data += temp_data
+
+        cerr(data + "\n\n\n")
+        cerr("Received " + str(len(data)) + " bytes of data from " + server_addr + "\n")
+        cerr("Port Number: " + str(i) + "\n")
+        return
+    except:
+        pass
 
 def to_quit(message, status):
-    _to_quit = random.randint(0, 2)
+    _to_quit = random.randint(1, 2)
     if _to_quit == 0:
-        cerr(message)
+        # cerr(message)
         return True
-    cerr("Didn't quit " + status + "\n")
+    # cerr("Didn't quit " + status + "\n")
     return False
 
 class ActivePool(object):
@@ -104,12 +91,12 @@ if __name__ == '__main__':
         cerr("usage: ./client.py proxy_addr server_port\n")
         exit(1)
 
-    for i in xrange(10000, 1000000):
-        cerr("Checking port " + str(i))
-        thread = threading.Thread(target = client_thread, args = (sys.argv[1], sys.argv[2]))
+    for i in xrange(1000, 100000):
+        # cerr("Checking port " + str(i) + "\n")
+        thread = threading.Thread(target = client_thread, args = (sys.argv[1], i))
         thread.start()
         # raw_input("Press enter to spawn next thread\n")
-        time.sleep(1)
+        # time.sleep(0.01)
 
     cerr("Terminated\n")
 

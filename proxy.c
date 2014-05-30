@@ -3,7 +3,7 @@
     a client for a web server.  Listens for connection requests from a client
     on specified port
 
-    Author:           Maxim Lobanov & Rongduan Zhu
+    Author:           Maxim Lobanov 587 697 & Rongduan Zhu 584 169
     Last Modified:    30/05/2014
 */
 

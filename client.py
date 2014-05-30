@@ -18,7 +18,9 @@ address = ["www.google.com",
             "www.mubook.me",
             "mundula.csse.unimelb.edu.au",
             "www.youtube.com",
-            "www.lms.unimelb.edu.au"]
+            "www.lms.unimelb.edu.au",
+            "www.worldslongestwebsite.com",
+            "www.amazon.com"]
 
 def client_thread(proxy_addr, port_no):
     sockfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -105,7 +107,8 @@ if __name__ == '__main__':
     while True:
         thread = threading.Thread(target = client_thread, args = (sys.argv[1], sys.argv[2]))
         thread.start()
-        raw_input("Press enter to spawn next thread\n")
+        # raw_input("Press enter to spawn next thread\n")
+        time.sleep(0.3)
 
     cerr("Terminated\n")
 

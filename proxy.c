@@ -163,6 +163,7 @@ int main(int argc, char const *argv[])
         if (err) {
             fprintf(stderr, "Unable to create thread \
                     with error message %d\n", err);
+            // let the proxy wait a bit for some threads to clear away
             sleep(5);
             continue;
         }
@@ -170,8 +171,7 @@ int main(int argc, char const *argv[])
         // detach the thread
         if (pthread_detach(thread)) {
             fprintf(stderr, "Unable to detach thread\n");
-            sleep(5);
-            continue;
+            exit(EXIT_FAILURE);
         }
     }
 

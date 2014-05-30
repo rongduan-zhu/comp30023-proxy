@@ -1,8 +1,11 @@
 /*
-    Multithreaded simplified proxy program
+    Proxy Server - designed to handle multiple concurrent requests from a
+    a client for a web server.  Listens for connection requests from a client
+    on specified port
+
     Author:           Maxim Lobanov & Rongduan Zhu
     Last Modified:    30/05/2014
- */
+*/
 
 #include <stdio.h>
 #include <sys/socket.h>
@@ -18,7 +21,8 @@
 #include <pthread.h>
 #include <time.h>
 
-/* Buffer size used for reading response from server and requests from client */
+/* Buffer size used for reading response from server and requests
+   from client */
 #define BUFFER_SIZE 2048
 /* Buffer size used for sending a error message back to client */
 #define SMALL_BUFFER_SIZE 256
@@ -30,8 +34,8 @@
 /* Request handling function used to handle request from client */
 void *request_handler(void *);
 
-/* Builds a get request from a hostname (should be deleted as new client creates
-   the request (Not used because new version)
+/* Builds a get request from a hostname (should be deleted as new client
+   creates the request (Not used because new version)
 */
 char *build_query(char *);
 
@@ -39,7 +43,10 @@ char *build_query(char *);
 char *get_host_from_query(char *);
 
 /* Print log for a request */
-void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostname);
+void print_log(char *ip,
+               int port_number,
+               int bytes_sent,
+               char *requested_hostname);
 
 /* mutex lock */
 pthread_mutex_t lock;
@@ -50,10 +57,13 @@ typedef struct {
     struct sockaddr_in cli_addr;
 } thread_args;
 
+/* Set up proxy server and begin listening for client requests */
+/* Command Line Argument: Port Number - Integer */
 int main(int argc, char const *argv[])
 {
     if (argc != 2) {
-        fprintf(stderr,"Incorrect number of arguments.\nUsage: %s port_number\n", argv[0]);
+        fprintf(stderr,"Incorrect number of arguments.\n \
+                Usage: %s port_number\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -85,13 +95,16 @@ int main(int argc, char const *argv[])
 
     // Sets up server
     proxy_addr.sin_family = AF_INET;
-    // htonl converts unsigned int hostlong from host byte order to network byte order
+    // htonl converts unsigned int hostlong from host byte order
+    // to network byte order
     proxy_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     proxy_addr.sin_port = htons(atoi(argv[1]));
 
 
     // bind the server to the port
-    if (bind(proxy_sockfd, (struct sockaddr*) &proxy_addr, sizeof(proxy_addr)) < 0) {
+    if (bind(proxy_sockfd,
+            (struct sockaddr*) &proxy_addr,
+            sizeof(proxy_addr)) < 0) {
         fprintf(stderr, "Unable to bind to port\n");
         exit(1);
     }
@@ -104,7 +117,9 @@ int main(int argc, char const *argv[])
     // starts accepting requests
     while (1) {
         pthread_t thread;
-        if (0 > (client_sockfd = accept(proxy_sockfd, (struct sockaddr*) &cli_addr, &cli_addr_length))) {
+        if (0 > (client_sockfd = accept(proxy_sockfd,
+                                        (struct sockaddr*) &cli_addr,
+                                        &cli_addr_length))) {
             fprintf(stderr, "Error on accept with error %d\n", errno);
             exit(EXIT_FAILURE);
         }
@@ -112,16 +127,21 @@ int main(int argc, char const *argv[])
         thread_args *thread_arg;
         thread_arg = (thread_args *) malloc(sizeof(thread_args));
         if (thread_arg == NULL) {
-            fprintf(stderr, "Oh no! Not enough memory to create new thread\nSkipping request\n");
+            fprintf(stderr, "Oh no! Not enough memory to create \
+                    new thread\nSkipping request\n");
             continue;
         }
         thread_arg->client_sockfd = client_sockfd;
         thread_arg->cli_addr = cli_addr;
 
         // on receiving a request, spawn new thread
-        int err = pthread_create(&thread, NULL, request_handler, (void*) thread_arg);
+        int err = pthread_create(&thread,
+                                 NULL,
+                                 request_handler,
+                                 (void*) thread_arg);
         if (err) {
-            fprintf(stderr, "Unable to create thread with error message %d\n", err);
+            fprintf(stderr, "Unable to create thread \
+                    with error message %d\n", err);
             sleep(5);
             continue;
         }
@@ -253,7 +273,9 @@ void *request_handler(void *thread_arg) {
 
     // connect to host
     host_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (connect(host_sockfd, (struct sockaddr *)&host_addr, sizeof(struct sockaddr)) < 0) {
+    if (connect(host_sockfd,
+                (struct sockaddr *)&host_addr,
+                sizeof(struct sockaddr)) < 0) {
         fprintf(stderr, "Can't connect to host.\n");
 
         // close sockets
@@ -266,7 +288,7 @@ void *request_handler(void *thread_arg) {
     }
 
     // forward request onto server
-    if (0 == (bwrite = write(host_sockfd, query, strlen(query)))) {
+    if ((bwrite = write(host_sockfd, query, strlen(query))) == 0) {
         fprintf(stderr, "Can't write to host\n.");
 
         // close sockets
@@ -313,14 +335,15 @@ char *build_query(char *host) {
     query = (char *) malloc(strlen(host)
                             + strlen(get)
                             - 3);
-    // not using "get" as second argument as compiler gives a warning, and we might
-    // get mark deduction. After googling, the warning is completely normal, and
-    // it can be safely ignored, but I don't wanna risk it
+    // not using "get" as second argument as compiler gives a warning, and
+    // we might get mark deduction. After googling, the warning is completely
+    // normal, and it can be safely ignored, but I don't wanna risk it
     if (query == NULL) {
         fprintf(stderr, "Oh no :O, not enough memory!\nClosing Connection\n");
         return query;
     }
-    sprintf(query, "GET / HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", host);
+    sprintf(query, "GET / HTTP/1.0\r\nHost: %s\r\n\
+            Connection: close\r\n\r\n", host);
     return query;
 }
 
@@ -345,7 +368,8 @@ char *get_host_from_query(char *query) {
     return hostname;
 }
 
-void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostname) {
+void print_log(char *ip, int port_number,
+               int bytes_sent, char *requested_hostname) {
     FILE *fp;
     time_t current_time;
     char *time_string;
@@ -366,8 +390,10 @@ void print_log(char *ip, int port_number, int bytes_sent, char *requested_hostna
 
     fp = fopen("proxy.log", "a");
 
-    fprintf(fp, "%s,%s,%d,%d,%s\n", time_string, ip, port_number, bytes_sent, requested_hostname);
-    fprintf(stderr, "%s, %s, %d, %d, %s\n", time_string, ip, port_number, bytes_sent, requested_hostname);
+    fprintf(fp, "%s,%s,%d,%d,%s\n",
+            time_string, ip, port_number, bytes_sent, requested_hostname);
+    fprintf(stderr, "%s, %s, %d, %d, %s\n",
+            time_string, ip, port_number, bytes_sent, requested_hostname);
 
     fclose(fp);
 

@@ -13,4 +13,3 @@ clean:
 
 clobber:
 	/bin/rm $(POBJ) $(EXE)
-

@@ -43,7 +43,7 @@
     thread_args_t thread_arg: struct containing client socket and
                               client address
 
-    return: NULL
+    Return Value: NULL (function requires void* return value)
 */
 void *request_handler(void *);
 

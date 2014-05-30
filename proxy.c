@@ -155,6 +155,9 @@ void *request_handler(void *thread_arg) {
     struct hostent *host;
     cli_addr = arg.cli_addr;
 
+    // clear memory for unsed thread arguments
+    free((thread_args *) thread_arg);
+
     // declaring i/o buffers
     char to_client_buffer[BUFFER_SIZE];
 
@@ -175,6 +178,9 @@ void *request_handler(void *thread_arg) {
             char error_message[SMALL_BUFFER_SIZE] = "Query too big\n";
             fprintf(stderr, "Buffer overflow, terminating request\n");
             write(client_sockfd, error_message, strlen(error_message));
+
+            // close descriptors
+            close(client_sockfd);
             return NULL;
         }
 
@@ -207,6 +213,10 @@ void *request_handler(void *thread_arg) {
 
     if (end_of_request_flag != 1 || bread < 0) {
         fprintf(stderr, "Invalid request or client terminated early.\n");
+
+        // close sockets
+        close(client_sockfd);
+
         return NULL;
     }
 
@@ -214,6 +224,9 @@ void *request_handler(void *thread_arg) {
     // get host name from query
     hostname = get_host_from_query(query);
     if (hostname == NULL) {
+        // close sockets
+        close(client_sockfd);
+
         return NULL;
     }
 
@@ -221,6 +234,12 @@ void *request_handler(void *thread_arg) {
     host = gethostbyname(hostname);
     if (host == NULL) {
         fprintf(stderr,"No such host\n");
+
+        // close sockets
+        close(client_sockfd);
+
+        // free memory
+        free(hostname);
         return NULL;
     }
     host_addr.sin_family = AF_INET;
@@ -233,13 +252,27 @@ void *request_handler(void *thread_arg) {
     // connect to host
     host_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (connect(host_sockfd, (struct sockaddr *)&host_addr, sizeof(struct sockaddr)) < 0) {
-         fprintf(stderr, "Can't connect to host\n.");
-         return NULL;
+        fprintf(stderr, "Can't connect to host\n.");
+
+        // close sockets
+        close(client_sockfd);
+
+        // free memory
+        free(hostname);
+
+        return NULL;
     }
 
     // forward request onto server
     if (0 == (bwrite = write(host_sockfd, query, strlen(query)))) {
         fprintf(stderr, "Can't write to host\n.");
+
+        // close sockets
+        close(host_sockfd);
+        close(client_sockfd);
+
+        // free memory
+        free(hostname);
         return NULL;
     }
 
@@ -267,7 +300,6 @@ void *request_handler(void *thread_arg) {
     close(client_sockfd);
 
     // free memory
-    free((thread_args *) thread_arg);
     free(hostname);
 
     return NULL;
